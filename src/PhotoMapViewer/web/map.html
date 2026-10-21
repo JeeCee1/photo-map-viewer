@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<style>
+  html, body, #map { margin: 0; height: 100%; width: 100%; background: #1b1d21; }
+  .leaflet-container { background: #aad3df; font: 12px "Segoe UI", sans-serif; }
+  .leaflet-control-attribution { background: rgba(255,255,255,.7) !important; font-size: 10px; }
+
+  /* Current photo marker */
+  .pin { position: relative; width: 22px; height: 22px; }
+  .pin .dot {
+    position: absolute; left: 4px; top: 4px; width: 14px; height: 14px; border-radius: 50%;
+    background: #e5482b; border: 2px solid #fff; box-sizing: border-box;
+    box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  }
+  .pin .ring {
+    position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid #e5482b; box-sizing: border-box; opacity: 0;
+    animation: pulse 1.8s ease-out infinite;
+  }
+  .pin.approx .dot { background: rgba(255,255,255,.85); border: 2px dashed #e08a1e; }
+  .pin.approx .ring { border-color: #e08a1e; border-style: dashed; }
+  @keyframes pulse {
+    0% { transform: scale(.6); opacity: .9; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+
+  #badge {
+    position: absolute; left: 10px; bottom: 22px; z-index: 1000;
+    background: rgba(20,22,26,.78); color: #f2f2f2; padding: 5px 10px; border-radius: 6px;
+    font: 13px "Segoe UI", sans-serif; pointer-events: none; display: none;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="badge"></div>
+<script src="leaflet/leaflet.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // The three fixed views (south-west, north-east). Europe must match Regions.cs.
+  var VIEWS = {
+    nl:     [[50.72, 3.30], [53.58, 7.25]],
+    europe: [[34.0, -25.0], [72.0, 45.0]],
+    world:  [[-58.0, -170.0], [78.0, 180.0]]
+  };
+
+  var map = L.map("map", {
+    zoomControl: false,
+    keyboard: false,
+    attributionControl: true,
+    worldCopyJump: true,
+    minZoom: 1,
+    zoomSnap: 0.25,
+    fadeAnimation: true
+  });
+  L.control.zoom({ position: "topright" }).addTo(map);
+
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  map.fitBounds(VIEWS.europe);
+
+  var marker = null;
+  var trailLine = null;
+  var trailDots = L.layerGroup().addTo(map);
+  var currentView = "europe";
+  var currentZoomKey = null;
+  var badge = document.getElementById("badge");
+
+  function pinIcon(approx) {
+    return L.divIcon({
+      className: "",
+      html: '<div class="pin' + (approx ? " approx" : "") + '"><div class="ring"></div><div class="dot"></div></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11]
+    });
+  }
+
+  function setBadge(text) {
+    if (text) { badge.textContent = text; badge.style.display = "block"; }
+    else { badge.style.display = "none"; }
+  }
+
+  function moveTo(view, lat, lon, zoom, animate) {
+    var opts = { animate: !!animate, duration: 1.4, padding: [12, 12] };
+    if (view === "custom") {
+      var target = L.latLng(lat, lon);
+      if (animate) map.flyTo(target, zoom, { duration: 1.4 });
+      else map.setView(target, zoom, { animate: false });
+      currentView = "custom";
+      return;
+    }
+    // Fixed views don't move when the view stays the same: only the marker moves
+    // (unless the marker went off-screen, e.g. after the user dragged the map).
+    if (view === currentView && currentZoomKey === view && map.getBounds().contains(L.latLng(lat, lon))) return;
+    if (animate) map.flyToBounds(VIEWS[view], opts);
+    else map.fitBounds(VIEWS[view], { animate: false, padding: [12, 12] });
+    currentView = view;
+    currentZoomKey = view;
+  }
+
+  function drawTrail(points, mode) {
+    trailDots.clearLayers();
+    if (trailLine) { map.removeLayer(trailLine); trailLine = null; }
+    if (!points || points.length < 2) return;
+    var latlngs = points.map(function (p) { return [p[0], p[1]]; });
+    trailLine = L.polyline(latlngs, {
+      color: "#e5482b",
+      weight: mode === "jumps" ? 1.5 : 2.5,
+      opacity: mode === "jumps" ? 0.45 : 0.6,
+      dashArray: mode === "jumps" ? "4 6" : null,
+      interactive: false
+    }).addTo(map);
+    // Faint dots for earlier photos (skip the last one: that's the current marker).
+    for (var i = 0; i < latlngs.length - 1; i++) {
+      var age = (latlngs.length - 1 - i) / latlngs.length;
+      L.circleMarker(latlngs[i], {
+        radius: 3.5, weight: 1, color: "#ffffff", fillColor: "#e5482b",
+        fillOpacity: 0.85 - age * 0.6, opacity: 0.8 - age * 0.5, interactive: false
+      }).addTo(trailDots);
+    }
+  }
+
+  // ---- API called from the app ----
+  window.pm = {
+    /**
+     * s = { lat, lon, approx, view: "nl"|"europe"|"world"|"custom", zoom, trail: [[lat,lon],...],
+     *       trailMode: "path"|"jumps", animate, badge }
+     */
+    show: function (s) {
+      var ll = L.latLng(s.lat, s.lon);
+      if (!marker) marker = L.marker(ll, { icon: pinIcon(s.approx), interactive: false, keyboard: false }).addTo(map);
+      else { marker.setLatLng(ll); marker.setIcon(pinIcon(s.approx)); }
+      marker.setOpacity(1);
+      drawTrail(s.trail, s.trailMode);
+      moveTo(s.view, s.lat, s.lon, s.zoom, s.animate);
+      setBadge(s.badge || "");
+    },
+
+    /** No location for this photo. mode: "keep" | "world" | "hide" */
+    none: function (mode, badgeText) {
+      if (mode === "hide" || mode === "world") {
+        if (marker) marker.setOpacity(0);
+        drawTrail(null);
+      }
+      if (mode === "world") {
+        map.flyToBounds(VIEWS.world, { duration: 1.2 });
+        currentView = "world"; currentZoomKey = "world";
+      }
+      setBadge(badgeText || "");
+    },
+
+    clear: function () {
+      if (marker) { map.removeLayer(marker); marker = null; }
+      drawTrail(null);
+      setBadge("");
+    },
+
+    resize: function () { map.invalidateSize({ animate: false }); }
+  };
+
+  window.addEventListener("resize", function () { map.invalidateSize({ animate: false }); });
+
+  // After a click on the map, keys land here instead of in the app: pass the slideshow keys on.
+  var KEYS = ["ArrowLeft", "ArrowRight", " ", "F11", "Escape", "o", "O", "s", "S", "m", "M", "r", "R"];
+  document.addEventListener("keydown", function (e) {
+    if (KEYS.indexOf(e.key) >= 0 && window.chrome && window.chrome.webview) {
+      e.preventDefault();
+      window.chrome.webview.postMessage("key:" + e.key);
+    }
+  });
+
+  // Tell the app we're ready.
+  if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage("ready");
+})();
+</script>
+</body>
+</html>
