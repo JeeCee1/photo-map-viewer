@@ -24,15 +24,33 @@ jobs:
       - name: Get ExifTool
         shell: pwsh
         run: |
-          $ver = (Invoke-WebRequest https://exiftool.org/ver.txt -UseBasicParsing).Content.Trim()
-          Write-Host "ExifTool $ver"
-          Invoke-WebRequest "https://exiftool.org/exiftool-${ver}_64.zip" -OutFile "$env:RUNNER_TEMP/exiftool.zip" -UseBasicParsing
-          Expand-Archive "$env:RUNNER_TEMP/exiftool.zip" -DestinationPath "$env:RUNNER_TEMP/exiftool-x"
-          $dir = Get-ChildItem "$env:RUNNER_TEMP/exiftool-x" -Directory | Select-Object -First 1
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          try { $ver = (Invoke-WebRequest https://exiftool.org/ver.txt -UseBasicParsing).Content.Trim() }
+          catch { Write-Host "::error::Could not read exiftool.org/ver.txt: $($_.Exception.Message)"; throw }
+          Write-Host "ExifTool version $ver"
+          $zip = "$env:RUNNER_TEMP/exiftool.zip"
+          $urls = @(
+            "https://exiftool.org/exiftool-${ver}_64.zip",
+            "https://sourceforge.net/projects/exiftool/files/exiftool-${ver}_64.zip/download"
+          )
+          $got = $false
+          foreach ($u in $urls) {
+            try { Invoke-WebRequest $u -OutFile $zip -UseBasicParsing -UserAgent "Wget"; $got = $true; Write-Host "Downloaded $u"; break }
+            catch { Write-Host "::warning::Download failed: $u — $($_.Exception.Message)" }
+          }
+          if (-not $got) { Write-Host "::error::ExifTool download failed"; exit 1 }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP/exiftool-x" -Force
+          $exe = Get-ChildItem "$env:RUNNER_TEMP/exiftool-x" -Recurse -Filter "exiftool*.exe" | Select-Object -First 1
+          if (-not $exe) {
+            $list = (Get-ChildItem "$env:RUNNER_TEMP/exiftool-x" -Recurse | Select-Object -First 20 | ForEach-Object { $_.FullName }) -join ' | '
+            Write-Host "::error::No exiftool exe in the zip: $list"; exit 1
+          }
           New-Item -ItemType Directory -Force tools-bin/exiftool | Out-Null
-          Copy-Item "$($dir.FullName)/*" tools-bin/exiftool -Recurse
-          Rename-Item "tools-bin/exiftool/exiftool(-k).exe" exiftool.exe
-          & tools-bin/exiftool/exiftool.exe -ver
+          Copy-Item "$($exe.DirectoryName)/*" tools-bin/exiftool -Recurse
+          Rename-Item "tools-bin/exiftool/$($exe.Name)" exiftool.exe
+          $v = & tools-bin/exiftool/exiftool.exe -ver
+          Write-Host "::notice::Bundled ExifTool $v"
 
       - name: Core checks
         shell: pwsh
