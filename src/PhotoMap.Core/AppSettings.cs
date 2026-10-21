@@ -28,6 +28,7 @@ public sealed class AppSettings
     public int TrailLength { get; set; } = 40;
     public int RandomTrailJumps { get; set; } = 4;
     public bool TownNamesOnline { get; set; } = true;
+    public bool SuggestFromNames { get; set; } = true;
     public bool AnimateMap { get; set; } = true;
 
     // Missing GPS

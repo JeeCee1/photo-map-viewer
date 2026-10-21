@@ -83,8 +83,8 @@ public static class Scanner
                 if (item.ExifLat.HasValue && item.ExifLon.HasValue)
                 {
                     var c = Regions.CountryNear(item.ExifLat.Value, item.ExifLon.Value);
-                    item.CountryId = c?.Id;
-                    item.CountryName = c?.Name;
+                    item.ExifCountryId = c?.Id;
+                    item.ExifCountryName = c?.Name;
                 }
             }
             result.Add(item);

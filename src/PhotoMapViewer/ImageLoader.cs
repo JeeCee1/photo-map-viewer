@@ -14,14 +14,18 @@ public sealed class ImageLoader
     readonly int _maxPx;
     readonly Dictionary<string, Task<BitmapSource?>> _cache = new(StringComparer.OrdinalIgnoreCase);
     readonly LinkedList<string> _order = new();
-    const int CacheSize = 6;
+    readonly int _cacheSize;
 
     static readonly HashSet<string> MagickFirst = new(StringComparer.OrdinalIgnoreCase)
     {
         ".heic", ".heif", ".avif", ".webp"
     };
 
-    public ImageLoader(int maxPx) => _maxPx = Math.Clamp(maxPx, 800, 4096);
+    public ImageLoader(int maxPx, int cacheSize = 6)
+    {
+        _maxPx = Math.Clamp(maxPx, 200, 4096);
+        _cacheSize = cacheSize;
+    }
 
     /// <summary>Get (or start loading) a photo. Call from the UI thread.</summary>
     public Task<BitmapSource?> Get(string fullPath, int orientation)
@@ -35,7 +39,7 @@ public sealed class ImageLoader
         t = Task.Run(() => Load(fullPath, orientation, _maxPx));
         _cache[fullPath] = t;
         _order.AddLast(fullPath);
-        while (_order.Count > CacheSize)
+        while (_order.Count > _cacheSize)
         {
             _cache.Remove(_order.First!.Value);
             _order.RemoveFirst();

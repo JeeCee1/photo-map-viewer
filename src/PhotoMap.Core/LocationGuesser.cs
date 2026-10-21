@@ -9,13 +9,25 @@ public static class LocationGuesser
 {
     public static int Apply(IList<PhotoItem> items, bool enabled, TimeSpan window)
     {
-        // Start from what the files say.
+        // Start from what the user set, else what the files say.
+        var countries = new Dictionary<(double, double), (string Id, string Name)?>();
         foreach (var it in items)
         {
-            if (it.ExifLat.HasValue && it.ExifLon.HasValue)
+            it.GuessedFrom = null;
+            if (it.ManualLat.HasValue && it.ManualLon.HasValue)
+            {
+                it.Lat = it.ManualLat; it.Lon = it.ManualLon;
+                it.Source = LocationSource.Manual;
+                var key = (Math.Round(it.Lat.Value, 3), Math.Round(it.Lon.Value, 3));
+                if (!countries.TryGetValue(key, out var c))
+                    countries[key] = c = Regions.CountryNear(it.Lat.Value, it.Lon.Value);
+                it.CountryId = c?.Id; it.CountryName = c?.Name;
+            }
+            else if (it.ExifLat.HasValue && it.ExifLon.HasValue)
             {
                 it.Lat = it.ExifLat; it.Lon = it.ExifLon;
                 it.Source = LocationSource.Exif;
+                it.CountryId = it.ExifCountryId; it.CountryName = it.ExifCountryName;
             }
             else
             {
@@ -23,11 +35,10 @@ public static class LocationGuesser
                 it.Source = LocationSource.None;
                 it.CountryId = it.CountryName = null;
             }
-            it.GuessedFrom = null;
         }
         if (!enabled) return 0;
 
-        var known = items.Where(i => i.Source == LocationSource.Exif && i.Taken.HasValue)
+        var known = items.Where(i => i.Source is LocationSource.Exif or LocationSource.Manual && i.Taken.HasValue)
                          .OrderBy(i => i.Taken!.Value).ToList();
         if (known.Count == 0) return 0;
 

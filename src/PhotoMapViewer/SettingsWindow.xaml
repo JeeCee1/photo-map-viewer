@@ -128,6 +128,10 @@
                 <TextBlock Style="{StaticResource Note}"
                            Text="Sends the rounded location of each photo to OpenStreetMap's place-name service. Results are remembered, so each place is looked up only once. Country names always work offline." />
 
+                <CheckBox x:Name="SuggestFromNames" Content="Suggest places from folder and file names (online)" Margin="0,6,0,0" />
+                <TextBlock Style="{StaticResource Note}"
+                           Text="Used when adding locations: a folder called “Kreta 2012” puts the pin on Crete for you to confirm. Only names with real words are sent; camera numbers and dates are skipped." />
+
                 <!-- Missing GPS -->
                 <TextBlock Text="Photos without a location" Style="{StaticResource Section}" />
                 <CheckBox x:Name="GuessLocations" Content="Guess from photos taken around the same time" Checked="Update_Enabled" Unchecked="Update_Enabled" />

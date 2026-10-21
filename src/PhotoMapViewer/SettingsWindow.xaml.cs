@@ -36,6 +36,7 @@ public partial class SettingsWindow : Window
         TrailLength.Value = Math.Clamp(s.TrailLength, 2, 200);
         RandomJumps.Value = Math.Clamp(s.RandomTrailJumps, 0, 15);
         TownNames.IsChecked = s.TownNamesOnline;
+        SuggestFromNames.IsChecked = s.SuggestFromNames;
 
         GuessLocations.IsChecked = s.GuessLocations;
         GuessWindow.Value = Math.Clamp(s.GuessWindowHours, 1, 12);
@@ -67,6 +68,7 @@ public partial class SettingsWindow : Window
         s.TrailLength = (int)TrailLength.Value;
         s.RandomTrailJumps = (int)RandomJumps.Value;
         s.TownNamesOnline = TownNames.IsChecked == true;
+        s.SuggestFromNames = SuggestFromNames.IsChecked == true;
 
         s.GuessLocations = GuessLocations.IsChecked == true;
         s.GuessWindowHours = GuessWindow.Value;

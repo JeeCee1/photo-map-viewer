@@ -24,6 +24,18 @@
   }
   .pin.approx .dot { background: rgba(255,255,255,.85); border: 2px dashed #e08a1e; }
   .pin.approx .ring { border-color: #e08a1e; border-style: dashed; }
+  .pin.manual .dot { background: #2b7de5; }
+  .pin.manual .ring { border-color: #2b7de5; }
+
+  /* Location editing: a big blue drop-pin you can drag */
+  .editpin { width: 30px; height: 42px; cursor: grab; filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+  .editpin:active { cursor: grabbing; }
+  .editing .leaflet-container, .editing #map { cursor: crosshair; }
+  #edithint {
+    position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 1000;
+    background: #2b7de5; color: #fff; padding: 6px 12px; border-radius: 6px;
+    font: 13px "Segoe UI", sans-serif; pointer-events: none; display: none; white-space: nowrap;
+  }
   @keyframes pulse {
     0% { transform: scale(.6); opacity: .9; }
     100% { transform: scale(2.4); opacity: 0; }
@@ -39,6 +51,7 @@
 <body>
 <div id="map"></div>
 <div id="badge"></div>
+<div id="edithint">Drag the pin, or click the map</div>
 <script src="leaflet/leaflet.js"></script>
 <script>
 (function () {
@@ -76,10 +89,10 @@
   var currentZoomKey = null;
   var badge = document.getElementById("badge");
 
-  function pinIcon(approx) {
+  function pinIcon(kind) {
     return L.divIcon({
       className: "",
-      html: '<div class="pin' + (approx ? " approx" : "") + '"><div class="ring"></div><div class="dot"></div></div>',
+      html: '<div class="pin ' + (kind || "") + '"><div class="ring"></div><div class="dot"></div></div>',
       iconSize: [22, 22],
       iconAnchor: [11, 11]
     });
@@ -138,9 +151,10 @@
      */
     show: function (s) {
       var ll = L.latLng(s.lat, s.lon);
-      if (!marker) marker = L.marker(ll, { icon: pinIcon(s.approx), interactive: false, keyboard: false }).addTo(map);
-      else { marker.setLatLng(ll); marker.setIcon(pinIcon(s.approx)); }
-      marker.setOpacity(1);
+      var kind = s.manual ? "manual" : (s.approx ? "approx" : "");
+      if (!marker) marker = L.marker(ll, { icon: pinIcon(kind), interactive: false, keyboard: false }).addTo(map);
+      else { marker.setLatLng(ll); marker.setIcon(pinIcon(kind)); }
+      marker.setOpacity(editing ? 0 : 1);
       drawTrail(s.trail, s.trailMode);
       moveTo(s.view, s.lat, s.lon, s.zoom, s.animate);
       setBadge(s.badge || "");
@@ -165,17 +179,81 @@
       setBadge("");
     },
 
-    resize: function () { map.invalidateSize({ animate: false }); }
+    resize: function () { map.invalidateSize({ animate: false }); },
+
+    /**
+     * Location editing. s = { lat, lon, zoom } to start with a pin there (zoom optional),
+     * or null to start without a pin (click the map to place it). edit(false) ends it.
+     */
+    edit: function (on, s) {
+      editing = !!on;
+      document.body.classList.toggle("editing", editing);
+      document.getElementById("edithint").style.display = editing ? "block" : "none";
+      if (marker) marker.setOpacity(editing ? 0 : 1);
+      if (editing) setBadge("");
+      if (!editing) {
+        if (editPin) { map.removeLayer(editPin); editPin = null; }
+        return;
+      }
+      if (s && s.lat != null) placeEditPin(s.lat, s.lon, s.zoom, false);
+      else if (editPin) { map.removeLayer(editPin); editPin = null; }
+    },
+
+    /** Move the edit pin (search result, suggestion) and zoom there. */
+    editMove: function (lat, lon, zoom) {
+      if (editing) placeEditPin(lat, lon, zoom || 12, false);
+    },
+
+    /** Show one of the fixed views (used while editing when there's no pin yet). */
+    view: function (name) {
+      if (VIEWS[name]) map.flyToBounds(VIEWS[name], { duration: 1.0, padding: [12, 12] });
+      currentView = name; currentZoomKey = name;
+    }
   };
+
+  var editing = false;
+  var editPin = null;
+  var editIcon = L.divIcon({
+    className: "",
+    html: '<svg class="editpin" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="M15 1C7.3 1 1 7.2 1 14.9 1 25.4 15 41 15 41s14-15.6 14-26.1C29 7.2 22.7 1 15 1z" fill="#2b7de5" stroke="#fff" stroke-width="2"/>' +
+          '<circle cx="15" cy="15" r="5.5" fill="#fff"/></svg>',
+    iconSize: [30, 42],
+    iconAnchor: [15, 41]
+  });
+
+  function post(msg) {
+    if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(msg);
+  }
+
+  function reportPin() {
+    var p = editPin.getLatLng().wrap();
+    post("pos:" + p.lat.toFixed(6) + "," + p.lng.toFixed(6));
+  }
+
+  function placeEditPin(lat, lon, zoom, report) {
+    var ll = L.latLng(lat, lon);
+    if (!editPin) {
+      editPin = L.marker(ll, { icon: editIcon, draggable: true, autoPan: true, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+      editPin.on("dragend", reportPin);
+    } else editPin.setLatLng(ll);
+    if (zoom) map.flyTo(ll, Math.max(zoom, map.getZoom() > zoom ? map.getZoom() : zoom), { duration: 1.0 });
+    if (report) reportPin();
+  }
+
+  map.on("click", function (e) {
+    if (!editing) return;
+    placeEditPin(e.latlng.lat, e.latlng.lng, null, true);
+  });
 
   window.addEventListener("resize", function () { map.invalidateSize({ animate: false }); });
 
   // After a click on the map, keys land here instead of in the app: pass the slideshow keys on.
-  var KEYS = ["ArrowLeft", "ArrowRight", " ", "F11", "Escape", "o", "O", "s", "S", "m", "M", "r", "R"];
+  var KEYS = ["ArrowLeft", "ArrowRight", " ", "F11", "Escape", "Enter", "o", "O", "s", "S", "m", "M", "r", "R", "l", "L", "a", "A", "z", "Z"];
   document.addEventListener("keydown", function (e) {
     if (KEYS.indexOf(e.key) >= 0 && window.chrome && window.chrome.webview) {
       e.preventDefault();
-      window.chrome.webview.postMessage("key:" + e.key);
+      window.chrome.webview.postMessage("key:" + (e.ctrlKey ? "Ctrl+" : "") + e.key);
     }
   });
 

@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace PhotoMap.Core;
 
-public enum LocationSource { None = 0, Exif = 1, Guessed = 2 }
+public enum LocationSource { None = 0, Exif = 1, Guessed = 2, Manual = 3 }
 
 public sealed class PhotoItem
 {
@@ -22,15 +22,24 @@ public sealed class PhotoItem
     public double? ExifLat { get; set; }
     public double? ExifLon { get; set; }
 
-    /// <summary>Location used for display: from EXIF or guessed from neighbours.</summary>
-    public double? Lat { get; set; }
-    public double? Lon { get; set; }
-    public LocationSource Source { get; set; }
-    /// <summary>For guessed locations: which photo it was borrowed from.</summary>
-    public string? GuessedFrom { get; set; }
+    /// <summary>Set by hand (from the locations file, not cached in the index).</summary>
+    [JsonIgnore] public double? ManualLat { get; set; }
+    [JsonIgnore] public double? ManualLon { get; set; }
 
-    public string? CountryId { get; set; }
-    public string? CountryName { get; set; }
+    /// <summary>Location used for display: set by hand, from EXIF, or guessed from neighbours.</summary>
+    [JsonIgnore] public double? Lat { get; set; }
+    [JsonIgnore] public double? Lon { get; set; }
+    [JsonIgnore] public LocationSource Source { get; set; }
+    /// <summary>For guessed locations: which photo it was borrowed from.</summary>
+    [JsonIgnore] public string? GuessedFrom { get; set; }
+
+    /// <summary>Country of the EXIF location (cached in the index).</summary>
+    public string? ExifCountryId { get; set; }
+    public string? ExifCountryName { get; set; }
+
+    /// <summary>Country of the displayed location.</summary>
+    [JsonIgnore] public string? CountryId { get; set; }
+    [JsonIgnore] public string? CountryName { get; set; }
 
     [JsonIgnore] public string Folder => Path.GetDirectoryName(RelPath) ?? "";
     [JsonIgnore] public string FileName => Path.GetFileName(RelPath);
@@ -45,7 +54,7 @@ public sealed class PhotoIndex
     public DateTime ScannedAt { get; set; }
     public List<PhotoItem> Items { get; set; } = new();
 
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     static readonly JsonSerializerOptions JsonOpts = new()
     {

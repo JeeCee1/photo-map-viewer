@@ -129,9 +129,20 @@ public partial class MainWindow : Window
             _mapReady = true;
             if (_playlist?.Current is { } cur) UpdateMap(cur, animate: false);
         }
+        else if (msg.StartsWith("pos:"))
+        {
+            var parts = msg[4..].Split(',');
+            if (parts.Length == 2 &&
+                double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var lat) &&
+                double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var lon))
+                OnEditPinMoved(lat, lon);
+        }
         else if (msg.StartsWith("key:"))
         {
-            HandleKey(msg[4..] switch
+            var k = msg[4..];
+            bool ctrl = k.StartsWith("Ctrl+");
+            if (ctrl) k = k[5..];
+            HandleKey(k switch
             {
                 "ArrowLeft" => Key.Left,
                 "ArrowRight" => Key.Right,
@@ -142,8 +153,12 @@ public partial class MainWindow : Window
                 "s" or "S" => Key.S,
                 "m" or "M" => Key.M,
                 "r" or "R" => Key.R,
+                "l" or "L" => Key.L,
+                "a" or "A" => Key.A,
+                "z" or "Z" => Key.Z,
+                "Enter" => Key.Enter,
                 _ => Key.None
-            });
+            }, ctrl);
         }
     }
 
@@ -166,7 +181,10 @@ public partial class MainWindow : Window
     {
         _scanCts?.Cancel();
         var cts = _scanCts = new CancellationTokenSource();
+        EndEdit();
+        bool sameFolder = string.Equals(_root, root, StringComparison.OrdinalIgnoreCase) && _store != null;
         _root = root;
+        if (!sameFolder) await OpenStoreAsync(root);
         _s.LastFolder = root;
         _s.Save();
         Title = $"{Path.GetFileName(root.TrimEnd('\\', '/'))} — Photo Map Viewer";
@@ -231,7 +249,7 @@ public partial class MainWindow : Window
     void UseIndex(PhotoIndex index, string? startAt)
     {
         _index = index;
-        LocationGuesser.Apply(index.Items, _s.GuessLocations, TimeSpan.FromHours(_s.GuessWindowHours));
+        ApplyLocations();
 
         // Videos: playback comes in the next version, so they're left out for now.
         var items = index.Items.Where(i => !i.IsVideo).ToList();
@@ -291,7 +309,7 @@ public partial class MainWindow : Window
         UpdateMap(item, animateMap);
 
         // Preload the next photo while this one is on screen.
-        if (_playlist.PeekNext() is { } next)
+        if (!Editing && _playlist.PeekNext() is { } next)
             _ = _images.Get(Path.Combine(_root, next.RelPath), next.Orientation);
 
         if (++_showsSinceSave >= 25)
@@ -319,7 +337,7 @@ public partial class MainWindow : Window
     {
         _slideTimer.Stop();
         _slideTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, _s.SecondsPerPhoto));
-        if (_playing && _playlist != null) _slideTimer.Start();
+        if (_playing && _playlist != null && !Editing) _slideTimer.Start();
     }
 
     void TogglePlay()
@@ -372,7 +390,7 @@ public partial class MainWindow : Window
     void ShowCaption(PhotoItem item, bool unreadable)
     {
         _placeCts?.Cancel();
-        if (!_s.ShowCaption) { Caption.Visibility = Visibility.Collapsed; return; }
+        if (!_s.ShowCaption || Editing) { Caption.Visibility = Visibility.Collapsed; return; }
 
         bool useLoc = item.HasLocation && (item.Source == LocationSource.Exif || _s.ShowGuessed);
         CaptionPlace.Visibility = _s.CaptionPlace || unreadable ? Visibility.Visible : Visibility.Collapsed;
@@ -426,7 +444,7 @@ public partial class MainWindow : Window
 
     void UpdateMap(PhotoItem item, bool animate)
     {
-        if (!_mapReady || !_mapVisible || _playlist == null) return;
+        if (!_mapReady || !_mapVisible || _playlist == null || Editing) return;
 
         bool useLoc = item.HasLocation && (item.Source == LocationSource.Exif || _s.ShowGuessed);
         if (!useLoc)
@@ -479,12 +497,18 @@ public partial class MainWindow : Window
             lat,
             lon,
             approx = item.Source == LocationSource.Guessed,
+            manual = item.Source == LocationSource.Manual,
             view,
             zoom = _s.CustomZoomLevel,
             trail,
             trailMode,
             animate,
-            badge = item.Source == LocationSource.Guessed ? "≈ Location guessed from a photo taken around the same time" : ""
+            badge = item.Source switch
+            {
+                LocationSource.Guessed => "≈ Location guessed from a photo taken around the same time",
+                LocationSource.Manual => "Location set by you",
+                _ => ""
+            }
         };
         _ = Map.ExecuteScriptAsync($"pm.show({JsonSerializer.Serialize(payload, MapJson)})");
     }
@@ -494,11 +518,17 @@ public partial class MainWindow : Window
     void OnKeyDown(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (HandleKey(key)) e.Handled = true;
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (HandleKey(key, ctrl)) e.Handled = true;
     }
 
-    bool HandleKey(Key key)
+    bool HandleKey(Key key, bool ctrl = false)
     {
+        // Typing in the search box: leave the keys to the box.
+        if (Keyboard.FocusedElement is TextBox && key != Key.Escape) return false;
+        if (Editing) return HandleEditKey(key, ctrl);
+        if (ctrl && key == Key.Z) { UndoLocation(); return true; }
+        if (ctrl) return false;
         switch (key)
         {
             case Key.Right: case Key.PageDown: Next(); return true;
@@ -510,6 +540,8 @@ public partial class MainWindow : Window
             case Key.S: OpenSettings(); return true;
             case Key.M: ToggleMap(); return true;
             case Key.R: CycleOrder(); return true;
+            case Key.L: StartEdit(); return true;
+            case Key.A: StartAddMode(); return true;
             default: return false;
         }
     }
@@ -623,6 +655,7 @@ public partial class MainWindow : Window
 
     void OpenSettings()
     {
+        if (Editing) return;
         SaveMapWidth();
         var old = _s.Clone();
         var dlg = new SettingsWindow(_s.Clone()) { Owner = this };
@@ -637,8 +670,7 @@ public partial class MainWindow : Window
         if (_playlist != null && _s.Order != old.Order) _playlist.SetOrder(_s.Order);
 
         bool guessChanged = _s.GuessLocations != old.GuessLocations || _s.GuessWindowHours != old.GuessWindowHours;
-        if (guessChanged && _index != null)
-            LocationGuesser.Apply(_index.Items, _s.GuessLocations, TimeSpan.FromHours(_s.GuessWindowHours));
+        if (guessChanged) ApplyLocations();
 
         RestartSlideTimer();
         if (_playlist?.Current is { } cur)

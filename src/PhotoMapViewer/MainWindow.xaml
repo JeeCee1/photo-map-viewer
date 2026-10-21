@@ -30,6 +30,30 @@
                 </StackPanel>
             </Border>
 
+            <!-- Location editing panel -->
+            <Border x:Name="EditPanel" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="18"
+                    MaxWidth="860" Padding="18,14" CornerRadius="10" Background="#EB141619" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="EditTitle" Foreground="White" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="EditSubtitle" Foreground="#B8B8B8" FontSize="13" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                    <StackPanel x:Name="EditThumbs" Orientation="Horizontal" Margin="0,10,0,0" />
+                    <DockPanel Margin="0,12,0,0">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource PanelButton}" Content="Find" Margin="6,0,0,0" Click="EditFind_Click" />
+                        <TextBox x:Name="EditSearch" Width="260" HorizontalAlignment="Left" Padding="6,5" FontSize="14"
+                                 KeyDown="EditSearch_KeyDown" ToolTip="Type a place and press Enter" />
+                    </DockPanel>
+                    <TextBlock x:Name="EditHint" Foreground="#9CC6FF" FontSize="13" Margin="0,8,0,0" TextWrapping="Wrap" />
+                    <WrapPanel Margin="0,12,0,0">
+                        <Button x:Name="BtnSetFolder" Style="{StaticResource BlueButton}" Margin="0,0,8,6" Click="BtnSetFolder_Click" />
+                        <Button x:Name="BtnSetPhoto" Style="{StaticResource BlueButton}" Margin="0,0,8,6" Click="BtnSetPhoto_Click" />
+                        <Button x:Name="BtnMixed" Style="{StaticResource PanelButton}" Margin="0,0,8,6" Content="Mixed places: one photo per day" Click="BtnMixed_Click" />
+                        <Button x:Name="BtnSkip" Style="{StaticResource PanelButton}" Margin="0,0,8,6" Content="Skip folder" Click="BtnSkip_Click" />
+                        <Button x:Name="BtnRemoveLoc" Style="{StaticResource PanelButton}" Margin="0,0,8,6" Content="Remove my location" Click="BtnRemoveLoc_Click" />
+                        <Button x:Name="BtnEditDone" Style="{StaticResource PanelButton}" Margin="0,0,0,6" Click="BtnEditDone_Click" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Toolbar (hides itself when the mouse is still) -->
             <Border x:Name="Toolbar" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="14"
                     Padding="4" CornerRadius="10" Background="{StaticResource OverlayBrush}">
@@ -41,7 +65,23 @@
                     <Button x:Name="BtnNext" Style="{StaticResource IconButton}" Content="&#xE893;" ToolTip="Next (→)" Click="BtnNext_Click" />
                     <Rectangle Width="1" Margin="4,8" Fill="#44FFFFFF" />
                     <Button x:Name="BtnOrder" Style="{StaticResource IconButton}" Content="&#xE8CB;" ToolTip="Order (R)" Click="BtnOrder_Click" />
-                    <Button x:Name="BtnMap" Style="{StaticResource IconButton}" Content="&#xE707;" ToolTip="Show / hide map (M)" Click="BtnMap_Click" />
+                    <Button x:Name="BtnMap" Style="{StaticResource IconButton}" Content="&#xE909;" ToolTip="Show / hide map (M)" Click="BtnMap_Click" />
+                    <Button x:Name="BtnLocations" Style="{StaticResource IconButton}" Content="&#xE707;" ToolTip="Locations" Click="BtnLocations_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Set location for this photo…" InputGestureText="L" Click="MenuSetLocation_Click" />
+                                <MenuItem Header="Add locations, folder by folder…" InputGestureText="A" Click="MenuAddLocations_Click" />
+                                <MenuItem x:Name="MenuUndo" Header="Undo last location change" InputGestureText="Ctrl+Z" Click="MenuUndo_Click" />
+                                <Separator />
+                                <MenuItem Header="Write my locations into the photo files">
+                                    <MenuItem Header="This photo" Click="MenuWritePhoto_Click" />
+                                    <MenuItem Header="All photos in this folder" Click="MenuWriteFolder_Click" />
+                                    <MenuItem Header="All photos" Click="MenuWriteAll_Click" />
+                                </MenuItem>
+                                <MenuItem Header="Show the locations file in Explorer" Click="MenuShowFile_Click" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                     <Button x:Name="BtnSettings" Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Settings (S)" Click="BtnSettings_Click" />
                     <Button x:Name="BtnFull" Style="{StaticResource IconButton}" Content="&#xE740;" ToolTip="Full screen (F11)" Click="BtnFull_Click" />
                 </StackPanel>

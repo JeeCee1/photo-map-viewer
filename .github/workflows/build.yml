@@ -21,15 +21,33 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Get ExifTool
+        shell: pwsh
+        run: |
+          $ver = (Invoke-WebRequest https://exiftool.org/ver.txt -UseBasicParsing).Content.Trim()
+          Write-Host "ExifTool $ver"
+          Invoke-WebRequest "https://exiftool.org/exiftool-${ver}_64.zip" -OutFile "$env:RUNNER_TEMP/exiftool.zip" -UseBasicParsing
+          Expand-Archive "$env:RUNNER_TEMP/exiftool.zip" -DestinationPath "$env:RUNNER_TEMP/exiftool-x"
+          $dir = Get-ChildItem "$env:RUNNER_TEMP/exiftool-x" -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force tools-bin/exiftool | Out-Null
+          Copy-Item "$($dir.FullName)/*" tools-bin/exiftool -Recurse
+          Rename-Item "tools-bin/exiftool/exiftool(-k).exe" exiftool.exe
+          & tools-bin/exiftool/exiftool.exe -ver
+
       - name: Core checks
         shell: pwsh
         run: |
           python -m pip install --quiet pillow piexif pillow-heif
           python -I tools/make_test_photos.py "$env:RUNNER_TEMP/photos"
+          $env:EXIFTOOL = (Resolve-Path tools-bin/exiftool/exiftool.exe).Path
           dotnet run --project tests/CoreTests -c Release -- "$env:RUNNER_TEMP/photos"
 
       - name: Publish
-        run: dotnet publish src/PhotoMapViewer/PhotoMapViewer.csproj -c Release -o publish
+        shell: pwsh
+        run: |
+          dotnet publish src/PhotoMapViewer/PhotoMapViewer.csproj -c Release -o publish
+          New-Item -ItemType Directory -Force publish/tools | Out-Null
+          Copy-Item tools-bin/exiftool publish/tools -Recurse
 
       - name: Zip
         shell: pwsh

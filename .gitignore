@@ -4,3 +4,4 @@ publish/
 out/
 *.user
 .vs/
+tools-bin/

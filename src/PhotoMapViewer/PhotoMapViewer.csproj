@@ -11,7 +11,7 @@
     <AssemblyName>PhotoMapViewer</AssemblyName>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Product>Photo Map Viewer</Product>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
