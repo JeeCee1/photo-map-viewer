@@ -2,11 +2,16 @@
 // Exit code 0 = all checks passed.
 using PhotoMap.Core;
 
-int failures = 0;
+int failures = 0, passed = 0;
 void Check(bool ok, string what)
 {
     Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  {what}");
-    if (!ok) failures++;
+    if (!ok)
+    {
+        failures++;
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") Console.WriteLine($"::error::FAIL {what}");
+    }
+    else passed++;
 }
 
 // --- Regions ---
@@ -222,4 +227,6 @@ if (args.Length > 0)
 }
 
 Console.WriteLine(failures == 0 ? "\nAll checks passed." : $"\n{failures} check(s) failed.");
+if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+    Console.WriteLine(failures == 0 ? $"::notice::Core checks: all {passed} passed" : $"::error::Core checks: {failures} failed");
 return failures == 0 ? 0 : 1;
