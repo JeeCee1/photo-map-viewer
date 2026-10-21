@@ -30,9 +30,10 @@ jobs:
           catch { Write-Host "::error::Could not read exiftool.org/ver.txt: $($_.Exception.Message)"; throw }
           Write-Host "ExifTool version $ver"
           $zip = "$env:RUNNER_TEMP/exiftool.zip"
+          # SourceForge first: exiftool.org doesn't always serve the newest Windows zip under this name.
           $urls = @(
-            "https://exiftool.org/exiftool-${ver}_64.zip",
-            "https://sourceforge.net/projects/exiftool/files/exiftool-${ver}_64.zip/download"
+            "https://sourceforge.net/projects/exiftool/files/exiftool-${ver}_64.zip/download",
+            "https://exiftool.org/exiftool-${ver}_64.zip"
           )
           $got = $false
           foreach ($u in $urls) {
